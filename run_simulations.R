@@ -7,7 +7,7 @@ cl <- makeCluster(10)
 registerDoParallel(cl)
 
 
-parOut <- foreach(i=1:2) %dopar% {
+parOut <- foreach(i=1:nrow(parameters)) %dopar% {
         require(lavaan)
         require(tidyverse)
         p_values = converged = neg_var <- numeric(n_sim)
@@ -31,7 +31,9 @@ parOut <- foreach(i=1:2) %dopar% {
         c(sum(neg_var),  sum(converged), sum(p_values < 0.05))
 }
 
-
 results <- cbind(parameters, matrix(unlist(parOut), nrow=length(parOut), byrow=T))
+names(results)[9:11] <- c("sum_occured_neg_var", "sum_converge", "power")
+
+write.csv(results, "results.csv", row.names=F)
       
       

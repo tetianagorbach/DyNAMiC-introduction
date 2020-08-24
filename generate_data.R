@@ -1,7 +1,7 @@
 GenerateDataFromLatentChangeModel <- function(sample_size, attrition_rate,
                                               intercept_t1, intercept_change,
                                               var_t1, var_change, var_errors,  self_feedback) {
-  # generates data according to the Latent change model
+  # generates data according to the latent change model
   require(mvtnorm)
   # var_errors <- 3 * (1 - reliability) / reliability * var_t1
   var_matrix <- diag(26) * c(var_t1, var_change, rep(var_errors, 24)) # matrix of covariances
