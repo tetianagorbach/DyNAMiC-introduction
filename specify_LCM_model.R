@@ -1,4 +1,8 @@
-# model specification -----------------------------------------------------
+# model specification, inspired by 
+# Kievit RA, Brandmaier AM, Ziegler G, Van Harmelen AL, de Mooij SM, Moutoussis M, Goodyer IM, Bullmore E, Jones PB, Fonagy P, Lindenberger U. 
+# Developmental cognitive neuroscience using latent change score models: A tutorial and applications. Developmental cognitive neuroscience. 2018 Oct 1;33:99-117.
+# Parts of the script from https://osf.io/bvkuw/, file "1_ULCS.R", are used here.
+# -----------------------------------------------------
 LCM <- '
 #####     The following lines specify the core assumptions of the LCS 
 #####     and should not generally be modified

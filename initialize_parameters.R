@@ -5,11 +5,10 @@ parameters <- expand.grid(
         sample_size  = 180,
         attrition_rate = c(0.1, 0.2, 0.4),
         intercept_t1 =  50,
-        intercept_change = c(5, 10),
+        intercept_change = c(5),
         var_t1 =  1,
-        var_change = c(0.05, 0.1, 0.2, 0.5),
-        var_errors = c(0.05, 0.1, 0.3),
-        # reliability = c(0.7, 0.8, 0.9, 0.97), # Cronbach's alpha for sum of individual test that defines variance of measurement errors:
-        # var_errors = 3*(1-alpha)/alpha*var_t1 assuming variances of errors are the same
+        var_change = c(0.1, 0.2, 0.5),
+        reliability = c(0.7, 0.8, 0.9, 0.95), # var(latents)/var(observed tests)
         self_feedback = c(-0.05,  -0.2) # correlation between change and T1
 )
+
