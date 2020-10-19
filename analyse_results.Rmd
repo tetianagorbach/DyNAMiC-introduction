@@ -1,0 +1,84 @@
+---
+title: "Analyze power calculations"
+author: ""
+date: ""
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+Read results from power calculations:
+```{r}
+results <-  read.csv("results20201019.csv", row.names = NULL)
+```
+
+Average power by variance of change:
+```{r}
+results%>%
+        group_by( var_change)%>%
+        summarise(m = mean(power))
+```
+
+Average power by reliability:
+```{r}
+results%>%
+        group_by( reliability)%>%
+        summarise(mean_power = mean(power))
+```
+
+What factors affect power: 
+```{r}
+anova(lm(power~attrition_rate, data=results))
+anova(lm(power~self_feedback, data=results))
+anova(lm(power~var_change, data=results)) #affects
+anova(lm(power~reliability, data=results)) #affects
+anova(lm(power~sum_occured_neg_var, data=results)) #affects
+summary(lm(power~var_change + reliability, data=results))
+```
+
+How often did negative estimators of variance of change occur?
+```{r}
+results %>%
+        gather(key = "variable", value = "value",
+               -c(sum_converge, sum_occured_neg_var, intercept_t1, power, sample_size))%>%
+        ggplot() +
+        geom_point(aes(x = value, y = sum_occured_neg_var)) +
+        facet_grid(~variable, scales="free_x")
+
+results%>%
+        group_by( reliability, var_change)%>%
+        summarise(m = mean(sum_occured_neg_var))
+
+results%>%
+        group_by( var_change, reliability)%>%
+        summarise(sum_neg_var = sum(sum_occured_neg_var))
+
+nrow(results%>%filter(var_change>=0.2 & reliability>=0.8))*100
+
+```
+
+Power when reliabiltiy is at least 80%, and also variance of change at least 20% of the baseline variance
+```{r}
+min(results%>%filter(var_change>=0.2 & reliability>=0.8)%>%select(power))
+```
+
+Power vs. parameters:
+```{r}
+theme_set(
+        theme_bw() +
+                theme(legend.position = "top")
+)
+results %>%
+        gather(key = "variable", value = "value",
+               -c(power, sample_size, var_t1, intercept_t1, intercept_change, sum_converge, sum_occured_neg_var))%>%
+        ggplot() +
+        geom_point(aes(x = value, y = power)) +
+        facet_grid(~variable, scales="free_x")
+```
+
+
+
+

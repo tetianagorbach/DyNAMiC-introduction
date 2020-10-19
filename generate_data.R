@@ -1,15 +1,24 @@
 GenerateDataFromLatentChangeModel <- function(sample_size, attrition_rate,
                                               intercept_t1, intercept_change,
-                                              var_t1, var_change, var_errors,  self_feedback) {
+                                              var_t1, var_change, reliability,  self_feedback) {
   # generates data according to the latent change model
   require(mvtnorm)
-  # var_errors <- 3 * (1 - reliability) / reliability * var_t1
-  var_matrix <- diag(26) * c(var_t1, var_change, rep(var_errors, 24)) # matrix of covariances
+  # reliability = var_true/(var_true + var_error) ->
+   var_error_domaini_t1 =    (1 - reliability) /reliability * var_t1 #, for all i = 1,...,3.
+   var_error_domaini_testj_t1 = (1 - reliability) /reliability * (var_t1 + var_error_domaini_t1) # for all i=1,...,3, j=1,...,3.
+   var_cog_t2 = var_t1 + var_change + 2 * self_feedback * sqrt(var_t1 * var_change)
+   var_error_domaini_t2 = (1 - reliability) / reliability * var_cog_t2 # for all i = 1,...,3
+   var_error_domaini_testj_t2 = (1 - reliability) /reliability * (var_cog_t2 + var_error_domaini_t2) # for all i = 1,...,3
+        
+  var_matrix <- diag(26) * c(var_t1, var_change,  # matrix of covariances
+                             rep(var_error_domaini_t1, 3), rep(var_error_domaini_testj_t1, 9),  # baseline
+                             rep(var_error_domaini_t2, 3), rep(var_error_domaini_testj_t2, 9))
+  
   var_matrix[1, 2] <- var_matrix[2, 1] <-  self_feedback * sqrt(var_change * var_t1) # add covariance between t1 and change
   errors <- rmvnorm(sample_size, rep(0, 26), var_matrix)
   
-  cog_t1 <- intercept_t1 + errors[, 1]
-  dcog <- intercept_change + errors[, 2]
+  cog_t1 <- intercept_t1 + errors[, 1]  # baseline
+  dcog <- intercept_change + errors[, 2] # cognitive change
   cog_t2 <- cog_t1 + dcog
   
  # T1:
@@ -55,6 +64,5 @@ GenerateDataFromLatentChangeModel <- function(sample_size, attrition_rate,
           domain3_test1_t2, domain3_test2_t2, domain3_test3_t2
   )
   data_lcm[1:round(attrition_rate * sample_size), grepl("_t2", names(data_lcm))] <- NA # introduce missing data at T2
-
   return(data_lcm) 
 }
