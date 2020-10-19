@@ -1,0 +1,217 @@
+---
+title: "Cognition descriptives"
+output: word_document
+---
+
+```{r setup, include=FALSE, echo=F}
+knitr::opts_chunk$set(echo = TRUE)
+require(tidyverse)
+require(readxl)
+require(mice) # for missing data pattern
+require(knitr) # for tables
+require(gridExtra) # for ggplots
+require(psych) # for the summary table
+library(grid)
+```
+
+
+Read cognition from "S:\\Dynamic\\0.Common\\Spreadsheets\\Cogtestdata_master.xlsx".
+
+```{r, echo=T}
+cogn.dynamic <- readxl::read_excel("S:\\Dynamic\\0.Common\\Spreadsheets\\Cogtestdata_master.xlsx",
+                           sheet = 1)%>%
+  filter(!Age %in% c("DROPOUT", NA))%>% # delete additional rows with missing data
+  filter(! ID %in% c(40012, 40035)) # delete dropouts 40012, 40035
+  
+cogn.dynamic <- cogn.dynamic %>%
+    dplyr::select( "ID", "Age", "AgeGroup", "Sex",
+            wrc="rc", "nrc", "orc",  # EM tasks
+            lu = "l", "nb", "su",  # WM tasks
+            lc = "verspeed", nc = "numspeed", fc = "figspeed", # PS tasks 
+            SRB, motdiff, tapping_l, tapping_r)  
+
+```
+
+## Missing data pattern in cognitive data:
+```{r}
+kable(md.pattern(cogn.dynamic, plot=T, rotate.names = T),
+      caption = "Missing per variable in cognitive data")
+```
+
+
+
+## Histograms and boxplots in one plot
+
+```{r}
+
+test.labs <- c("Word recall", "Number-word recall", "Object-location recall", 
+               "Letter updating", "Number updating" , "Spatial updating",
+               "Letter comparison", "Number comparison", "Figure comparison", 
+               "Semantic knowledge", "Implicit learning", "Motor speed, left", "Motor speed, right")
+names <- c("wrc", "nrc", "orc", "lu", "nb", "su", "lc", "nc", "fc","SRB", "motdiff", "tapping_l", "tapping_r")
+
+# histograms
+p <- list()
+for (i in 1:13){
+  p[[i]] <- cogn.dynamic%>%
+    ggplot( aes(x = !!sym(names[i]))) +
+    geom_histogram(aes(y =..count..), 
+                   colour = "black", 
+                   fill = "grey") +
+    theme_bw()+
+    theme(text = element_text(size=6), 
+          title = element_text(size=5),
+          axis.title = element_text(size=6),
+          axis.text = element_text(size=5),
+          axis.text.y = element_text(margin = margin(r = 0)),
+          axis.text.x = element_text(margin = margin(r = 0)),
+          plot.margin=grid::unit(c(0,2,0,0), "mm"),
+          panel.spacing = unit(0, "lines"),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank(),
+          panel.grid.minor = element_line(linetype = "blank"),
+          plot.title = element_text(margin=margin(0,0,0,0)))+
+    ggtitle(test.labs[i])
+}
+p1 <- grid.arrange(
+  grobs = p,
+  widths = c(1, 1, 1),
+  layout_matrix = rbind(c(1, 2, 3),
+                        c(4, 5, 6),
+                        c(7, 8, 9),
+                        c(10,11, NA),
+                        c(12,13, NA)),
+  top = grid::textGrob("A", x = 0, hjust = 0), 
+  left= grid::textGrob("count",gp=gpar(fontsize=8), rot=90), 
+  bottom = grid::textGrob("Value",gp=gpar(fontsize=8)) )
+
+# boxplots
+
+p2 <- list()
+for (i in 1:13){
+p2[[i]]<- cogn.dynamic%>%
+  mutate(Age=as.numeric(Age),
+         AgeGroup5 = cut(Age, breaks=seq(19, 80, by=10), closed="left", labels=seq(25, 75, by=10)))%>%
+  ggplot(aes(x=as.numeric(as.character(AgeGroup5)), y=!!sym(names[i]), group=AgeGroup5))+
+  geom_boxplot(outlier.size = .1, outlier.shape = 19)+
+  theme_bw()+
+  theme(text = element_text(size=6), 
+        title = element_text(size=5),
+        axis.title = element_text(size=5),
+        axis.text = element_text(size=5),
+        axis.text.y = element_text(margin = margin(r = 0)),
+        axis.text.x = element_text(margin = margin(r = 0)),
+        plot.margin=grid::unit(c(0,2,0,0), "mm"),
+        panel.spacing = unit(0, "lines"),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        panel.grid.minor = element_line(linetype = "blank"),
+        plot.title = element_text(margin=margin(0,0,0,0)))+
+  scale_x_continuous(breaks=seq(20,80,10))+
+  ggtitle(test.labs[i])
+}
+p2 <- grid.arrange(
+  grobs = p2,
+  widths = c(1, 1, 1),
+  layout_matrix = rbind(c(1, 2, 3),
+                        c(4, 5, 6),
+                        c(7, 8, 9),
+                        c(10,11, NA),
+                        c(12,13, NA)),
+  top = grid::textGrob("B", x = 0, hjust = 0), 
+  left= grid::textGrob("value", gp=gpar(fontsize=8), rot=90), 
+  bottom = grid::textGrob("Age", gp=gpar(fontsize=8)) )
+p <- grid.arrange(p1, p2, ncol = 2)
+ggsave("Figure5.jpg", plot = p, width = 16, height = 14, units = "cm")
+```
+
+
+# Skewness and kurtosis
+```{r}
+
+skew_kurtosis <- data.frame(variable = names(cogn.dynamic))
+library(moments)
+for (test in names(cogn.dynamic)[-c(1:4)]){
+  skew_kurtosis[skew_kurtosis$variable==test, 2] <- round(skewness(cogn.dynamic[, test], na.rm=T),2)
+  skew_kurtosis[skew_kurtosis$variable==test, 3] <- round(kurtosis(cogn.dynamic[, test], na.rm=T),2)
+}
+
+shapiro.test(cogn.dynamic$wrc)
+```
+
+# Reliability of cognitive tests
+```{r}
+cogn.dynamic <- readxl::read_excel("S:\\Dynamic\\0.Common\\Spreadsheets\\Cogtestdata_master.xlsx",
+                           sheet = 1)%>%
+  filter(!Age %in% c("DROPOUT", NA))%>%
+  filter(! ID %in% c(40012,40035)) # delete dropouts 40012,40035
+  
+library(ltm)
+CalcCronbachAlpha <- function(dat, tests, summary.test){
+  av.summary <- dat[complete.cases(dat[, summary.test]),]
+  print(pairs(av.summary[, tests]))
+  print(sum(!av.summary[, summary.test]== rowSums(av.summary[, tests])))
+  return(ltm::cronbach.alpha(av.summary[,tests]))
+}
+CalcSpearmanBrown <- function(dat, tests){
+  a <- cor(rowSums(dat[,tests[1:(length(tests)/2)]]),
+           rowSums(dat[,tests[(length(tests)/2+1):length(tests)]]), use="complete.obs")
+ print(sum(complete.cases(dat[, tests])))
+ round(2*a/(1+a),3) # the same as reported by SPSS
+}
+
+# word recall
+CalcSpearmanBrown(dat=cogn.dynamic, tests=c("rc1", "rc2"))
+CalcCronbachAlpha(dat=cogn.dynamic, tests=c("rc1", "rc2"), summary.test = "rc")
+
+# number-word recall
+CalcSpearmanBrown(dat=cogn.dynamic, tests=c("nrc1", "nrc2"))
+CalcCronbachAlpha(dat=cogn.dynamic, tests=c("nrc1", "nrc2"), summary.test = "nrc")
+
+# object-location recall
+CalcSpearmanBrown(dat=cogn.dynamic, tests=c("orc1", "orc2"))
+CalcCronbachAlpha(dat=cogn.dynamic, tests=c("orc1", "orc2"), summary.test = "orc")
+
+# letter updating
+CalcSpearmanBrown(dat=cogn.dynamic, tests=paste0("ll", 1:16))
+CalcCronbachAlpha(dat=cogn.dynamic, tests=paste0("ll", 1:16), summary.test = "l")
+
+# number updating
+CalcSpearmanBrown(dat=cogn.dynamic, tests=paste0("nb", 1:4))
+CalcCronbachAlpha(dat=cogn.dynamic, tests=paste0("nb", 1:4), summary.test = "nb")
+
+# spatial updating
+CalcSpearmanBrown(dat=cogn.dynamic, tests=paste0("su", 1:10))
+CalcCronbachAlpha(dat=cogn.dynamic, tests=paste0("su", 1:10), summary.test = "su")
+
+
+# letter comparison
+CalcSpearmanBrown(dat=cogn.dynamic, tests=paste0("verspeed", 1:2))
+CalcCronbachAlpha(dat=cogn.dynamic, tests=paste0("verspeed", 1:2), summary.test = "verspeed")
+
+#number comparison
+CalcSpearmanBrown(dat=cogn.dynamic, tests=paste0("numspeed", 1:2))
+CalcCronbachAlpha(dat=cogn.dynamic, tests=paste0("numspeed", 1:2), summary.test = "numspeed")
+
+# figure comparison
+CalcSpearmanBrown(dat=cogn.dynamic, tests=paste0("figspeed", 1:2))
+CalcCronbachAlpha(dat=cogn.dynamic, tests=paste0("figspeed", 1:2), summary.test = "figspeed")
+
+# Spearman-Brown coefficient:
+a <- cor(rowSums(cogn.dynamic[,paste0("ll", 1:8)]), rowSums(cogn.dynamic[,paste0("ll", 9:16)]), use="complete.obs")
+spearman_brown_coef <- 2*a/(1+a) # the same as reported by SPSS
+```
+
+## Reliability of sums of cognitive measures 
+```{r}
+cogn.dynamic <- cogn.dynamic %>%
+    dplyr::select( "ID", "Age", "AgeGroup", "Sex",
+            wrc="rc", "nrc", "orc",  # EM tasks
+            lu = "l", "nb", "su",  # WM tasks
+            lc = "verspeed", nc = "numspeed", fc = "figspeed", # PS tasks 
+            SRB, motdiff, tapping_l, tapping_r)  
+ltm::cronbach.alpha(cogn.dynamic[,c("wrc", "nrc", "orc")])
+ltm::cronbach.alpha(cogn.dynamic[,c("lu", "nb", "su")], na.rm=T)
+ltm::cronbach.alpha(cogn.dynamic[,c("lc", "nc", "fc")], na.rm=T)
+```
+

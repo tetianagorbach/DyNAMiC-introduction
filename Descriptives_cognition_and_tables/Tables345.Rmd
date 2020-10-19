@@ -1,0 +1,451 @@
+---
+title: "Table sample demographics"
+output: word_document
+---
+
+```{r setup, include=FALSE, echo=F}
+knitr::opts_chunk$set(echo = TRUE)
+require(tidyverse)
+require(readxl)
+require(mice) # for missing data pattern
+require(knitr) # for tables
+require(gridExtra) # for ggplots
+require(psych) # for the summary table
+library(janitor) # for adorn_totals
+custom_mean_pm_sd <- function(x){
+ paste0(round(mean(x, na.rm=T),1), "±", round(sd(x, na.rm=T),1)) 
+}
+```
+
+# Read data files (read demographics the same as in Dynamic descriptives)
+First, I read the demographics data from "S:\Dynamic\0.Common\Spreadsheets\Age Sex and dropout status" and questionnaire data from "S:\\Dynamic\\0.Common\\Questionnaire data\\Questionnaire data.xlsm"
+```{r}
+# Demographics
+demographics <- readxl::read_excel("S:\\Dynamic\\0.Common\\Spreadsheets\\Age Sex and dropout status.xlsx",
+                col_types = c(rep("numeric",2), rep("guess",2), rep("numeric", 5), rep("guess",3)),
+                na=c("NA", "-"))%>%
+  filter(!Age %in% NA) # delete id 40012,40035: "dropout" as a note in the "Age Sex and dropout.xlsx"
+
+# Read questionnaire data 
+quest.data <- readxl::read_excel("S:\\Dynamic\\0.Common\\Questionnaire data\\Questionnaire data.xlsm")
+```
+Add ages to questionnaire data
+```{r}
+quest.data <- quest.data%>%mutate(ID = Dbf_id)
+quest.data <- merge(demographics%>%select(ID, Age, AgeGroup, Sex, MMSE), quest.data, by="ID",  all.y=T)
+# %>%
+#   mutate(Age=as.numeric(Age),
+#          AgeGroup = cut(Age, breaks=seq(19, 80, by=10), closed="left"))
+```
+
+## Sex, Age
+```{r}
+sex.age.mmse <- demographics%>%
+  select(value=Sex, AgeGroup)%>%
+  group_by(value, AgeGroup)%>%
+  summarise(n=n())%>%
+  mutate(name="Sex")%>%
+  group_by(AgeGroup)%>%
+  mutate(freq = n / sum(n)*100)%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n, freq))%>%
+  mutate(Total = rowSums(.[grep("n_", names(.))], na.rm = TRUE),
+         freq_total = Total/sum(Total)*100)%>%
+  adorn_totals("row")%>%
+select(sort(names(.), decreasing =T))
+
+age.mean <- demographics%>%
+  select(Age, AgeGroup)%>%
+  group_by(AgeGroup)%>%
+  summarise(n = custom_mean_pm_sd(Age))%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n))%>%
+  select(sort(names(.), decreasing =T))
+
+names(age.mean) <- paste0("n_", names(age.mean))
+age.mean[, "Total"] <-  quest.data%>%
+  summarise(n = custom_mean_pm_sd(Age))
+age.mean[,setdiff(names(sex.age.mmse), names(age.mean))] <- NA
+age.mean <- age.mean%>%
+  mutate( name="Age")%>%
+  select(sort(names(.), decreasing =T))
+sex.age.mmse <- rbind(sex.age.mmse, age.mean)
+rm(age.mean)
+```
+
+## MMSE
+```{r}
+mmse.mean <- demographics%>%
+  select(MMSE, AgeGroup)%>%
+  group_by(AgeGroup)%>%
+  summarise(n = custom_mean_pm_sd(MMSE))%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n))%>%
+  select(sort(names(.), decreasing =T))
+
+names(mmse.mean) <- paste0("n_", names(mmse.mean))
+mmse.mean[, "Total"] <-  quest.data%>%
+  summarise(n = custom_mean_pm_sd(MMSE))
+mmse.mean[,setdiff(names(sex.age.mmse), names(mmse.mean))] <- NA
+mmse.mean <- mmse.mean%>%
+  mutate( name="MMSE")%>%
+  select(sort(names(.), decreasing =T))
+sex.age.mmse <- rbind(sex.age.mmse, mmse.mean)
+rm(mmse.mean)
+```
+
+## Educational attainment
+```{r}
+edu.attainment <- quest.data%>%
+  select(FF6_7, AgeGroup)%>%
+ mutate(value = cut(FF6_7, breaks = c(0, 10, 14, max(FF6_7, na.rm=T)), right=F, include.lowest=F, 
+                    labels = c("<10 years (elementary school)", 
+                               "10-13 years (high school)", 
+                               ">13 years (college)")))%>%
+  group_by(value, AgeGroup)%>%
+  summarise(n=n())%>%
+  mutate(name="Educational status")%>%
+  group_by(AgeGroup)%>%
+  mutate(freq = n / sum(n)*100)%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n, freq))%>%
+  mutate(Total = rowSums(.[grep("n_", names(.))], na.rm = TRUE),
+         freq_total = Total/sum(Total)*100)%>%
+  adorn_totals("row")%>%
+select(sort(names(.), decreasing =T))
+  
+
+edu.attainment.mean <- quest.data%>%
+  select(FF6_7, AgeGroup)%>%
+  group_by(AgeGroup)%>%
+  summarise(mean_pm_sd = custom_mean_pm_sd(FF6_7))%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(mean_pm_sd))%>%
+  select(sort(names(.), decreasing =T))
+
+names(edu.attainment.mean) <- paste0("n_", names(edu.attainment.mean))
+edu.attainment.mean[, "Total"] <-  quest.data%>%
+  summarise(n = custom_mean_pm_sd(FF6_7))
+edu.attainment.mean[,setdiff(names(edu.attainment), names(edu.attainment.mean))] <- NA
+edu.attainment.mean <- edu.attainment.mean%>%
+  mutate( name="Years of education")%>%
+  select(sort(names(.), decreasing =T))
+edu.attainment <- rbind(edu.attainment, edu.attainment.mean)
+rm(edu.attainment.mean)
+```
+
+## Employment
+```{r}
+## Employment
+employment <- quest.data %>%
+  dplyr::mutate(value = recode(FF6_1, `1` = "Unemployed", `2` = "Retired", `3` = "Employed"))%>%
+  mutate(value = ifelse(FF6_1 == 3 & grepl("del", FF6_3, ignore.case = T) ==T,  "Employed, part time", # divide employed to part time and full time employed according to question FF6_3
+                        ifelse((grepl("hel", quest.data$FF6_3, ignore.case = T) == T & 
+                                  grepl("del", quest.data$FF6_3, ignore.case = T) == F) |
+                                 grepl("35", quest.data$FF6_3, ignore.case = T) == T, # define as "Employed full time a person who idicated that he/she works 35 h/week"
+                               "Employed, full time", value)))%>%
+  group_by(value, AgeGroup)%>%
+  summarise(n=n())%>%
+  mutate(name="Employment")%>%
+  group_by(AgeGroup)%>%
+  mutate(freq = n / sum(n)*100)%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n, freq))%>%
+  mutate(Total = rowSums(.[grep("n_", names(.))], na.rm = TRUE),
+         freq_total = Total/sum(Total)*100)%>%
+  adorn_totals("row")%>%
+  select(sort(names(.), decreasing =T))
+```
+
+## Housing
+```{r}
+accommodation <- quest.data %>%
+  dplyr::mutate(value = recode(FF6_11, `1` = "Villa", `2` = "Hyresrätt", `3` = "Bostadsrätt", `4` = "Vårdboende" ))%>%
+  dplyr::mutate(value = recode(value,  "Villa" = "House",  "Hyresrätt" = "Rental apartment", "Bostadsrätt" = "Cooperative apartment",  "Vårdboende" = "Nursing home" ))%>%
+  group_by(value, AgeGroup)%>%
+  summarise(n=n())%>%
+  mutate(name = "Accommodation")%>%
+  group_by(AgeGroup)%>%
+  mutate(freq = n / sum(n)*100)%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n, freq))%>%
+  mutate(Total = rowSums(.[grep("n_", names(.))], na.rm = TRUE),
+         freq_total = Total/sum(Total)*100)%>%
+  adorn_totals("row")%>%
+  select(sort(names(.), decreasing =T))
+```
+## Social status
+```{r}
+social.status <- quest.data %>%
+  dplyr::mutate(value = recode(FF6_8, `1` = "Singel", `2` = "Sambo", `3` = "Gift", `4` = "Skild", `5` ="Änka/änkling" ))%>%
+  dplyr::mutate(value = recode(value,  "Singel" = "Single",  "Sambo" = "Cohabitant", "Gift" = "Married", "Skild" = "Divorced", "Änka/änkling" = "Widow/widower" ))%>%
+  group_by(value, AgeGroup)%>%
+  summarise(n=n())%>%
+  mutate(name="Social status")%>%
+  group_by(AgeGroup)%>%
+  mutate(freq = n / sum(n)*100)%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n, freq))%>%
+  mutate(Total = rowSums(.[grep("n_", names(.))], na.rm = TRUE),
+         freq_total = Total/sum(Total)*100)%>%
+  adorn_totals("row")%>%
+  select(sort(names(.), decreasing =T))
+```
+
+
+## Number of children
+```{r}
+children <- quest.data%>%
+ mutate(value = cut(FF6_9, breaks = c(0,1, 4, max(FF6_9, na.rm=T)), right=F, include.lowest=T, 
+                    labels = c("0", "1-3", ">3") ))%>%
+  group_by(value, AgeGroup)%>%
+  summarise(n=n())%>%
+  mutate(name="Number of children")%>%
+  group_by(AgeGroup)%>%
+  mutate(freq = n / sum(n)*100)%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n, freq))%>%
+  mutate(Total = rowSums(.[grep("n_", names(.))], na.rm = TRUE),
+         freq_total = Total/sum(Total)*100)%>%
+  adorn_totals("row")%>%
+  select(sort(names(.), decreasing =T))
+
+children.mean <- quest.data%>%
+  select(FF6_9, AgeGroup)%>%
+  group_by(AgeGroup)%>%
+  summarise(mean_pm_sd = custom_mean_pm_sd(FF6_9))%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(mean_pm_sd))%>%
+  select(sort(names(.), decreasing =T))
+names(children.mean) <- paste0("n_", names(children.mean))
+children.mean[, "Total"] <-  quest.data%>%
+  summarise(n = custom_mean_pm_sd(FF6_10))
+children.mean[,setdiff(names(children), names(children.mean))] <- NA
+children.mean <- children.mean%>%
+  mutate( name="Number of children")%>%
+  select(sort(names(.), decreasing =T))
+children <- rbind(children, children.mean)
+rm(children.mean)
+```
+
+## Number of grandchildren
+```{r}
+grandchildren <- quest.data%>%
+ mutate(value = cut(FF6_10, breaks = c(0, 1, 5, max(FF6_10, na.rm=T)), right=F, include.lowest=T, 
+                    labels = c("0", "1-4", ">4")))%>%
+  group_by(value, AgeGroup)%>%
+  summarise(n=n())%>%
+  mutate(name="Number of grandchildren")%>%
+  group_by(AgeGroup)%>%
+  mutate(freq = n / sum(n)*100)%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n, freq))%>%
+  mutate(Total = rowSums(.[grep("n_", names(.))], na.rm = TRUE),
+         freq_total = Total/sum(Total)*100)%>%
+  adorn_totals("row")%>%
+  select(sort(names(.), decreasing =T))
+
+grandchildren.mean <- quest.data%>%
+  select(FF6_10, AgeGroup)%>%
+  group_by(AgeGroup)%>%
+  summarise(mean_pm_sd = custom_mean_pm_sd(FF6_10))%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(mean_pm_sd))%>%
+  select(sort(names(.), decreasing =T))
+names(grandchildren.mean) <- paste0("n_", names(grandchildren.mean))
+grandchildren.mean[, "Total"] <-  quest.data%>%
+  summarise(n = custom_mean_pm_sd(FF6_10))
+grandchildren.mean[,setdiff(names(grandchildren), names(grandchildren.mean))] <- NA
+grandchildren.mean <- grandchildren.mean%>%
+  mutate( name="Number of grandchildren")%>%
+  select(sort(names(.), decreasing =T))
+grandchildren <- rbind(grandchildren, grandchildren.mean)
+rm(grandchildren.mean)
+```
+
+## All Table.  Sample characteristics. Age, sex, education, and socioeconomic factors within life span decades (means ± standard deviation; frequencies).
+
+```{r}
+table1.dynamic <- rbind(sex.age.mmse, 
+                        edu.attainment,
+                        employment, accommodation,
+                        social.status, 
+                        children, 
+                        grandchildren)%>%
+  select(name, value, Total, freq_total, 
+         paste0(c("n_", "freq_"), rep(c("20-29","30-39", "40-49", "50-59", "60-69","70-79" ), each=2)))
+knitr::kable(table1.dynamic, digits=c(rep(0, 2), rep(c(0,1), times=7)))
+rm(accommodation, children, edu.attainment, employment, grandchildren, children, sex.age.mmse, social.status)
+```
+
+# Table health
+
+
+Reading medication data
+```{r}
+medications <- readxl::read_excel("S:\\Dynamic\\0.Common\\Questionnaire data\\Medication and indications from questionnaires\\medication_Vania_comments.xlsx")
+medications <- merge(medications,demographics%>%select(Dbf_id = ID, Age, AgeGroup ), by="Dbf_id")
+```
+
+
+## BMI
+```{r}
+bmi.mean <- demographics%>%
+  select(BMI, Height, Weight, AgeGroup)%>%
+  pivot_longer(cols = c(BMI, Height, Weight), names_to = "Variable", values_to ="value")%>%
+  group_by(AgeGroup, Variable)%>%
+  summarise(n = custom_mean_pm_sd(value))%>%
+  pivot_wider(names_from = AgeGroup, values_from=c(n))
+bmi.mean[bmi.mean$Variable=="BMI","Total"] <- custom_mean_pm_sd(demographics$BMI)
+bmi.mean[bmi.mean$Variable=="Height","Total"] <- custom_mean_pm_sd(demographics$Height)
+bmi.mean[bmi.mean$Variable=="Weight","Total"] <- custom_mean_pm_sd(demographics$Weight)
+
+```
+
+## Nicotine
+```{r}
+quest.data[is.na(quest.data$Tbk_7a), "Tbk_7a"] <- 0
+nicotine_function <- function(dat){
+ data.frame(value=c("No", "Yes, smoke", "Yes, snus", "Yes, smoke and snus", "NA", "in the data"),
+                       n = c(sum(dat$Tbk_1a %in% c(3,4)) - sum(dat$Tbk_7a %in% c(1, NA) & dat$Tbk_1a %in% c(3,4)),
+                             sum(dat$Tbk_7a %in% c(0, NA) & dat$Tbk_1a %in% c(1,2)), # röker
+                             sum(dat$Tbk_7a == 1 &!is.na(dat$Tbk_7a) & dat$Tbk_1a %in% c(3,4)), # snus 
+                             sum(dat$Tbk_7a == 1 &!is.na(dat$Tbk_7a)& dat$Tbk_1a %in% c(1,2)), # röker and snus
+                             sum(is.na(dat$Tbk_1a)),
+                             nrow(dat)))%>%
+                         mutate(prop = n/nrow(dat)*100,
+                                name="Nicotine")
+  
+}
+nicotine <- nicotine_function(quest.data)
+nicotine[, c("Age 20-29", "% Age 20-29")] <- nicotine_function(quest.data%>%filter(Age>=20 & Age<30))%>%select(n, prop)
+nicotine[, c("Age 30-39", "% Age 30-39")] <- nicotine_function(quest.data%>%filter(Age>=30 & Age<40))%>%select(n, prop)
+nicotine[, c("Age 40-49", "% Age 40-49")] <- nicotine_function(quest.data%>%filter(Age>=40 & Age<50))%>%select(n, prop)
+nicotine[, c("Age 50-59", "% Age 50-59")] <- nicotine_function(quest.data%>%filter(Age>=50 & Age<60))%>%select(n, prop)
+nicotine[, c("Age 60-69", "% Age 60-69")] <- nicotine_function(quest.data%>%filter(Age>=60 & Age<70))%>%select(n, prop)
+nicotine[, c("Age 70-79", "% Age 70-79")] <- nicotine_function(quest.data%>%filter(Age>=70 & Age<80))%>%select(n, prop)
+nicotine <- nicotine%>%select(name, value, everything())
+```
+
+## Medication
+
+Out of 178 subjects who submitted questionnaires, `r sum(!is.na(medications$MH_1.1a))` take at least one medicine.
+```{r}
+medication_function <- function(dat, name1){
+  medications <- dat%>%
+  select(Dbf_id, contains("indication"), NOTE)
+medication_list <- list()
+for (i in 1:nrow(medications)){
+  indication.subject <- character()
+  indication.subject <- as.character(medications%>%filter(Dbf_id ==  medications$Dbf_id[i])%>%select(contains("indication"))) # vector of indications for a subject
+  indication.subject <- indication.subject[!is.na(indication.subject)]
+  medication_list[[i]] <- unique(indication.subject)
+}
+medication_summary <-   as.data.frame(table(unlist(medication_list)))%>%
+  arrange(desc(Freq))
+names(medication_summary) <-  c("Indication", name1)
+medication_summary
+}
+medication <- medication_function(medications, "Total")
+medication <- merge(medication, medication_function(medications%>%filter(Age>=20 & Age<30), "20-29"), by="Indication", all.x=T)
+medication <- merge(medication, medication_function(medications%>%filter(Age>=30 & Age<40), "30-39"), by="Indication", all.x=T)
+medication <- merge(medication, medication_function(medications%>%filter(Age>=40 & Age<50), "40-49"), by="Indication", all.x=T)
+medication <- merge(medication, medication_function(medications%>%filter(Age>=50 & Age<60), "50-59"), by="Indication", all.x=T)
+medication <- merge(medication, medication_function(medications%>%filter(Age>=60 & Age<70), "60-69"), by="Indication", all.x=T)
+medication <- merge(medication, medication_function(medications%>%filter(Age>=70 & Age<80), "70-79"), by="Indication", all.x=T)
+medication <- medication%>%arrange(desc(Total))
+
+```
+
+## All Table 4. Health parameters. Objective and self-reported measures. Data are illustrated by frequencies and mean values (± standard deviation). 
+```{r}
+knitr::kable(bmi.mean, digits=1)
+knitr::kable(nicotine, digits=1)
+knitr::kable(medication, digits=1)
+rm(bmi.mean, nicotine, medication)
+```
+
+
+# Table 5. Social, cognitive, and physical activity (mean number of hours per week ± standard deviation).
+
+Here in the calculation of the mean "15+" answer is treated as 15.
+```{r}
+mean_pm_sd <- function(x){paste0(round(mean(x, na.rm=T),1), "±", round(sd(x, na.rm=T),1))} 
+min_max <- function(x){ # for min max column
+  if (max(x, na.rm=T)==15) {max_value <-">15"} else { max_value <- round(max(x, na.rm=T))}
+  paste0(round(min(x, na.rm=T),1), ", ", max_value)}
+
+activities <- quest.data%>%
+  mutate(
+    "Total social activity" =  rowSums(select(.,FF6_78:FF6_87)),
+    "Total cognitive activity" =  rowSums(select(.,FF6_12:FF6_29)),
+    "Total physical activity" =  rowSums(select(.,FF6_48:FF6_62))
+  )%>%
+  select(
+   ID = Dbf_id,
+  `Time spent with family members` = FF6_78, 
+  `Phone conversations with family members` = FF6_79,
+  `Meet friends` = FF6_80,
+  `Phone conversations with friends` = FF6_81,
+  `Time spent with relatives` = FF6_82,
+  `Phone conversations with relatives`= FF6_83,
+  `Going to restaurants/pubs/cafés with company` = FF6_84,
+  `Participation in a club or union` = FF6_85,
+  `Going to parties or social gatherings` = FF6_86,
+  `Going to church` = FF6_87,
+  `Total social activity`,
+  `Driving a car` = FF6_12,
+  `Play computer games` = FF6_13,
+  `Using the computer (for other purposes than games)` =FF6_14,
+  `Cooking` = FF6_15,
+  `Reading facts (sv. faktalitteratur)` = FF6_16,
+  `Reading novels` = FF6_17,
+  `Reading papers (sv. morgontidningen)` = FF6_18,
+  `Reading newspapers or periodicals` = FF6_19,
+  `Going to lectures or to other education` = FF6_20,
+  `Studying at home` = FF6_21,
+  `Playing cards` = FF6_22,
+  `Playing board games` = FF6_23,
+  `Playing a musical instrument` = FF6_24,
+  `Going to museums or art exhibitions` = FF6_25,
+  `Cross words` = FF6_26,
+  `Riddles and mind puzzles(e.g.,Sudoku)` = FF6_27,
+  `Writing texts` = FF6_28,
+  `Calculating` = FF6_29,
+  `Total cognitive activity`,
+  `Gardening` = FF6_48,
+  `Cleaning` = FF6_49,
+  `Dancing` = FF6_50,
+  `Walking` = FF6_51,
+  `Cycling` = FF6_52,
+  `Body building (sv. styrketränning)` = FF6_53,
+  `Gymnastics/aerobics (sv. gympa)` = FF6_54,
+  `Jogging` = FF6_55,
+  `Roller skiing (sv. åka rullskidor)` = FF6_56,
+  `Fishing` = FF6_57,
+  `Sailing` = FF6_58,
+  `Hunting` = FF6_59,
+  `Collecting mushrooms in forest` = FF6_60,
+  `Doing sports (i.e. tennis, golf, bowling)` = FF6_61,
+  `Flexibility and coordination classes` = FF6_62,
+  `Total physical activity`
+)
+
+activities <- merge(demographics%>%select(ID, Age, AgeGroup), activities, by="ID", all.x=T)
+table3.dynamic.all <- data.frame(`Variable` = c("AGE GROUP",
+                                            names(activities%>%
+    select(-c(ID, Age, AgeGroup)))))
+activities_only <- activities%>%
+    select(-c(ID, Age, AgeGroup))
+
+table3.dynamic.all[2:nrow(table3.dynamic.all),"Mean ± SD"] <- sapply(1:ncol(activities_only), function(v){mean_pm_sd(unlist(activities_only[,v]))})
+
+
+for (agegroup in sort(unique(activities$AgeGroup))){
+  table.age <- activities%>%filter(AgeGroup==agegroup)%>%
+    select(-c(ID, Age, AgeGroup))
+  table3.dynamic <- data.frame(a=numeric(46))
+  names(table3.dynamic) <- "Mean ± SD"
+  table3.dynamic[,"Mean ± SD"] <- sapply(1:ncol(table.age), function(v){mean_pm_sd(unlist(table.age[,v]))})
+  
+  table3.dynamic <- rbind(c(agegroup, rep("", 3)), table3.dynamic)
+  table3.dynamic.all <- cbind(table3.dynamic.all, table3.dynamic)
+}
+table3.dynamic.all[2:nrow(table3.dynamic.all),"Available"] <-  sapply(1:ncol(activities_only), function(v){sum(!is.na(activities_only[,v]))})
+table3.dynamic.all[2:nrow(table3.dynamic.all),"Min, Max"] <- sapply(1:ncol(activities_only), function(v){min_max(unlist(activities_only[,v]))})
+
+knitr::kable(table3.dynamic.all, digits=1)
+
+```
+
+
+
+
