@@ -1,5 +1,5 @@
 ---
-title: "Table sample demographics"
+title: "Tables, sample descriptives"
 output: word_document
 ---
 
@@ -17,7 +17,7 @@ custom_mean_pm_sd <- function(x){
 }
 ```
 
-# Read data files (read demographics the same as in Dynamic descriptives)
+# Read data files
 First, I read the demographics data from "S:\Dynamic\0.Common\Spreadsheets\Age Sex and dropout status" and questionnaire data from "S:\\Dynamic\\0.Common\\Questionnaire data\\Questionnaire data.xlsm"
 ```{r}
 # Demographics
