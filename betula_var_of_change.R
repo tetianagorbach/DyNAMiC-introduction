@@ -1,4 +1,4 @@
-# Here, the fraction of the variance of change to variance of baseline is estimated using the data from The Betula imaging study.
+# Here, the fraction of the variance of change to the variance of baseline is estimated using the data from The Betula imaging study.
 library(xlsx)
 library(tidyverse)
 
